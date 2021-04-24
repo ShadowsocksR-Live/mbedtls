@@ -2,7 +2,7 @@
 
 # basic-build-tests.sh
 #
-# Copyright (c) 2016, ARM Limited, All Rights Reserved
+# Copyright The Mbed TLS Contributors
 # SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
 #
 # This file is provided under the Apache License 2.0, or the
@@ -44,8 +44,6 @@
 #
 # **********
 #
-# This file is part of Mbed TLS (https://tls.mbed.org)
-#
 # Purpose
 #
 # Executes the basic test suites, captures the results, and generates a simple
@@ -82,6 +80,14 @@ fi
 : ${GNUTLS_SERV:="gnutls-serv"}
 : ${GNUTLS_LEGACY_CLI:="$GNUTLS_CLI"}
 : ${GNUTLS_LEGACY_SERV:="$GNUTLS_SERV"}
+
+# Used to make ssl-opt.sh deterministic.
+#
+# See also RELEASE_SEED in all.sh. Debugging is easier if both values are kept
+# in sync. If you change the value here because it breaks some tests, you'll
+# definitely want to change it in all.sh as well.
+: ${SEED:=1}
+export SEED
 
 # To avoid setting OpenSSL and GnuTLS for each call to compat.sh and ssl-opt.sh
 # we just export the variables they require

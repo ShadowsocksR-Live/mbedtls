@@ -15,7 +15,7 @@
  */
 
 /*
- *  Copyright (C) 2006-2018, Arm Limited (or its affiliates), All Rights Reserved
+ *  Copyright The Mbed TLS Contributors
  *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
  *
  *  This file is provided under the Apache License 2.0, or the
@@ -56,8 +56,6 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  *  **********
- *
- *  This file is part of Mbed TLS (https://tls.mbed.org)
  */
 
 #ifndef MBEDTLS_ECP_H
@@ -840,6 +838,9 @@ int mbedtls_ecp_tls_write_group( const mbedtls_ecp_group *grp,
  *                  intermediate results to prevent potential timing attacks
  *                  targeting these results. We recommend always providing
  *                  a non-NULL \p f_rng. The overhead is negligible.
+ *                  Note: unless #MBEDTLS_ECP_NO_INTERNAL_RNG is defined, when
+ *                  \p f_rng is NULL, an internal RNG (seeded from the value
+ *                  of \p m) will be used instead.
  *
  * \param grp       The ECP group to use.
  *                  This must be initialized and have group parameters

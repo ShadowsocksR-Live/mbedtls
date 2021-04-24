@@ -8,7 +8,7 @@
  *  memory footprint.
  */
 /*
- *  Copyright (C) 2006-2018, ARM Limited, All Rights Reserved
+ *  Copyright The Mbed TLS Contributors
  *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
  *
  *  This file is provided under the Apache License 2.0, or the
@@ -49,8 +49,6 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  *  **********
- *
- *  This file is part of mbed TLS (https://tls.mbed.org)
  */
 
 #ifndef MBEDTLS_CONFIG_H
@@ -566,6 +564,42 @@
 //#define MBEDTLS_ECP_NORMALIZE_MXZ_ALT
 
 /**
+ * \def MBEDTLS_TEST_CONSTANT_FLOW_MEMSAN
+ *
+ * Enable testing of the constant-flow nature of some sensitive functions with
+ * clang's MemorySanitizer. This causes some existing tests to also test
+ * this non-functional property of the code under test.
+ *
+ * This setting requires compiling with clang -fsanitize=memory. The test
+ * suites can then be run normally.
+ *
+ * \warning This macro is only used for extended testing; it is not considered
+ * part of the library's API, so it may change or disappear at any time.
+ *
+ * Uncomment to enable testing of the constant-flow nature of selected code.
+ */
+//#define MBEDTLS_TEST_CONSTANT_FLOW_MEMSAN
+
+/**
+ * \def MBEDTLS_TEST_CONSTANT_FLOW_VALGRIND
+ *
+ * Enable testing of the constant-flow nature of some sensitive functions with
+ * valgrind's memcheck tool. This causes some existing tests to also test
+ * this non-functional property of the code under test.
+ *
+ * This setting requires valgrind headers for building, and is only useful for
+ * testing if the tests suites are run with valgrind's memcheck. This can be
+ * done for an individual test suite with 'valgrind ./test_suite_xxx', or when
+ * using CMake, this can be done for all test suites with 'make memcheck'.
+ *
+ * \warning This macro is only used for extended testing; it is not considered
+ * part of the library's API, so it may change or disappear at any time.
+ *
+ * Uncomment to enable testing of the constant-flow nature of selected code.
+ */
+//#define MBEDTLS_TEST_CONSTANT_FLOW_VALGRIND
+
+/**
  * \def MBEDTLS_TEST_NULL_ENTROPY
  *
  * Enables testing and use of mbed TLS without any configured entropy sources.
@@ -820,6 +854,28 @@
  * Comment this macro to disable NIST curves optimisation.
  */
 #define MBEDTLS_ECP_NIST_OPTIM
+
+/**
+ * \def MBEDTLS_ECP_NO_INTERNAL_RNG
+ *
+ * When this option is disabled, mbedtls_ecp_mul() will make use of an
+ * internal RNG when called with a NULL \c f_rng argument, in order to protect
+ * against some side-channel attacks.
+ *
+ * This protection introduces a dependency of the ECP module on one of the
+ * DRBG or SHA modules (HMAC-DRBG, CTR-DRBG, SHA-512 or SHA-256.) For very
+ * constrained applications that don't require this protection (for example,
+ * because you're only doing signature verification, so not manipulating any
+ * secret, or because local/physical side-channel attacks are outside your
+ * threat model), it might be desirable to get rid of that dependency.
+ *
+ * \warning Enabling this option makes some uses of ECP vulnerable to some
+ * side-channel attacks. Only enable it if you know that's not a problem for
+ * your use case.
+ *
+ * Uncomment this macro to disable some counter-measures in ECP.
+ */
+//#define MBEDTLS_ECP_NO_INTERNAL_RNG
 
 /**
  * \def MBEDTLS_ECP_RESTARTABLE
@@ -1703,6 +1759,23 @@
  * Requires: MBEDTLS_SSL_TRUNCATED_HMAC
  */
 //#define MBEDTLS_SSL_TRUNCATED_HMAC_COMPAT
+
+/**
+ * \def MBEDTLS_TEST_HOOKS
+ *
+ * Enable features for invasive testing such as introspection functions and
+ * hooks for fault injection. This enables additional unit tests.
+ *
+ * Merely enabling this feature should not change the behavior of the product.
+ * It only adds new code, and new branching points where the default behavior
+ * is the same as when this feature is disabled.
+ * However, this feature increases the attack surface: there is an added
+ * risk of vulnerabilities, and more gadgets that can make exploits easier.
+ * Therefore this feature must never be enabled in production.
+ *
+ * Uncomment to enable invasive tests.
+ */
+//#define MBEDTLS_TEST_HOOKS
 
 /**
  * \def MBEDTLS_THREADING_ALT
@@ -3084,7 +3157,7 @@
  */
 
 /* MPI / BIGNUM options */
-//#define MBEDTLS_MPI_WINDOW_SIZE            6 /**< Maximum windows size used. */
+//#define MBEDTLS_MPI_WINDOW_SIZE            6 /**< Maximum window size used. */
 //#define MBEDTLS_MPI_MAX_SIZE            1024 /**< Maximum number of bytes for usable MPIs. */
 
 /* CTR_DRBG options */

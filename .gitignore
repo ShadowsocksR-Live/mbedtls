@@ -64,4 +64,5 @@ visualc/vs2015/.vs/
 /GSYMS
 /GTAGS
 /TAGS
+/cscope*.out
 /tags
