@@ -179,13 +179,14 @@ pre_initialize_variables () {
     : ${ARMC5_BIN_DIR:=/usr/bin}
     : ${ARMC6_BIN_DIR:=/usr/bin}
     : ${ARM_NONE_EABI_GCC_PREFIX:=arm-none-eabi-}
+    : ${ARM_LINUX_GNUEABI_GCC_PREFIX:=arm-linux-gnueabi-}
 
     # if MAKEFLAGS is not set add the -j option to speed up invocations of make
     if [ -z "${MAKEFLAGS+set}" ]; then
-        export MAKEFLAGS="-j"
+        export MAKEFLAGS="-j$(all_sh_nproc)"
     fi
 
-    # Include more verbose output for failing tests run by CMake
+    # Include more verbose output for failing tests run by CMake or make
     export CTEST_OUTPUT_ON_FAILURE=1
 
     # CFLAGS and LDFLAGS for Asan builds that don't use CMake
@@ -247,6 +248,9 @@ General options:
      --arm-none-eabi-gcc-prefix=<string>
                         Prefix for a cross-compiler for arm-none-eabi
                         (default: "${ARM_NONE_EABI_GCC_PREFIX}")
+     --arm-linux-gnueabi-gcc-prefix=<string>
+                        Prefix for a cross-compiler for arm-linux-gnueabi
+                        (default: "${ARM_LINUX_GNUEABI_GCC_PREFIX}")
      --armcc            Run ARM Compiler builds (on by default).
      --except           Exclude the COMPONENTs listed on the command line,
                         instead of running only those.
@@ -314,6 +318,18 @@ trap 'fatal_signal HUP' HUP
 trap 'fatal_signal INT' INT
 trap 'fatal_signal TERM' TERM
 
+# Number of processors on this machine. Used as the default setting
+# for parallel make.
+all_sh_nproc ()
+{
+    {
+        nproc || # Linux
+        sysctl -n hw.ncpuonline || # NetBSD, OpenBSD
+        sysctl -n hw.ncpu || # FreeBSD
+        echo 1
+    } 2>/dev/null
+}
+
 msg()
 {
     if [ -n "${current_component:-}" ]; then
@@ -378,6 +394,7 @@ pre_parse_command_line () {
     while [ $# -gt 0 ]; do
         case "$1" in
             --arm-none-eabi-gcc-prefix) shift; ARM_NONE_EABI_GCC_PREFIX="$1";;
+            --arm-linux-gnueabi-gcc-prefix) shift; ARM_LINUX_GNUEABI_GCC_PREFIX="$1";;
             --armcc) no_armcc=;;
             --armc5-bin-dir) shift; ARMC5_BIN_DIR="$1";;
             --armc6-bin-dir) shift; ARMC6_BIN_DIR="$1";;
@@ -691,6 +708,18 @@ component_check_doxygen_warnings () {
     record_status tests/scripts/doxygen.sh
 }
 
+component_check_python2 () {
+    # Check that what used to work with Python 2 still works with Python 2.
+    msg "check: python2 compatibility"
+    mkdir -p tests/with_python2 tests/with_python3
+    make -C tests PYTHON=python2 c_files
+    mv tests/test_suite_*.c tests/with_python2/
+    make -C tests PYTHON=python3 c_files
+    mv tests/test_suite_*.c tests/with_python3/
+    diff -r tests/with_python2 tests/with_python3
+    rm -rf tests/with_python2 tests/with_python3
+}
+
 
 
 ################################################################
@@ -765,7 +794,7 @@ component_test_full_cmake_gcc_asan () {
 component_test_zlib_make() {
     msg "build: zlib enabled, make"
     scripts/config.pl set MBEDTLS_ZLIB_SUPPORT
-    make ZLIB=1 CFLAGS='-Werror -O1'
+    make ZLIB=1 CFLAGS='-Werror -O2'
 
     msg "test: main suites (zlib, make)"
     make test
@@ -788,7 +817,7 @@ EOF
 component_test_zlib_cmake() {
     msg "build: zlib enabled, cmake"
     scripts/config.pl set MBEDTLS_ZLIB_SUPPORT
-    cmake -D ENABLE_ZLIB_SUPPORT=On -D CMAKE_BUILD_TYPE:String=Check .
+    cmake -D ENABLE_ZLIB_SUPPORT=On -D CMAKE_BUILD_TYPE:String=Release .
     make
 
     msg "test: main suites (zlib, cmake)"
@@ -1026,7 +1055,7 @@ component_test_small_mbedtls_ssl_dtls_max_buffering () {
 component_test_full_cmake_clang () {
     msg "build: cmake, full config, clang" # ~ 50s
     scripts/config.pl full
-    CC=clang cmake -D CMAKE_BUILD_TYPE:String=Check -D ENABLE_TESTING=On .
+    CC=clang cmake -D CMAKE_BUILD_TYPE:String=Release -D ENABLE_TESTING=On .
     make
 
     msg "test: main suites (full config)" # ~ 5s
@@ -1237,7 +1266,7 @@ component_test_memory_buffer_allocator_backtrace () {
     scripts/config.pl set MBEDTLS_PLATFORM_MEMORY
     scripts/config.pl set MBEDTLS_MEMORY_BACKTRACE
     scripts/config.pl set MBEDTLS_MEMORY_DEBUG
-    CC=gcc cmake .
+    CC=gcc cmake -DCMAKE_BUILD_TYPE:String=Release .
     make
 
     msg "test: MBEDTLS_MEMORY_BUFFER_ALLOC_C and MBEDTLS_MEMORY_BACKTRACE"
@@ -1248,7 +1277,7 @@ component_test_memory_buffer_allocator () {
     msg "build: default config with memory buffer allocator"
     scripts/config.pl set MBEDTLS_MEMORY_BUFFER_ALLOC_C
     scripts/config.pl set MBEDTLS_PLATFORM_MEMORY
-    CC=gcc cmake .
+    CC=gcc cmake -DCMAKE_BUILD_TYPE:String=Release .
     make
 
     msg "test: MBEDTLS_MEMORY_BUFFER_ALLOC_C"
@@ -1301,7 +1330,7 @@ component_test_null_entropy () {
 component_test_no_date_time () {
     msg "build: default config without MBEDTLS_HAVE_TIME_DATE"
     scripts/config.pl unset MBEDTLS_HAVE_TIME_DATE
-    CC=gcc cmake
+    CC=gcc cmake -D CMAKE_BUILD_TYPE:String=Check .
     make
 
     msg "test: !MBEDTLS_HAVE_TIME_DATE - main suites"
@@ -1413,7 +1442,8 @@ component_build_mbedtls_config_file () {
 }
 
 component_test_m32_o0 () {
-    # Build once with -O0, to compile out the i386 specific inline assembly
+    # Build without optimization, so as to use portable C code (in a 32-bit
+    # build) and not the i386-specific inline assembly.
     msg "build: i386, make, gcc -O0 (ASan build)" # ~ 30s
     scripts/config.pl full
     make CC=gcc CFLAGS="$ASAN_CFLAGS -m32 -O0" LDFLAGS="-m32 $ASAN_CFLAGS"
@@ -1428,19 +1458,20 @@ support_test_m32_o0 () {
     esac
 }
 
-component_test_m32_o1 () {
-    # Build again with -O1, to compile in the i386 specific inline assembly
-    msg "build: i386, make, gcc -O1 (ASan build)" # ~ 30s
+component_test_m32_o2 () {
+    # Build with optimization, to use the i386 specific inline assembly
+    # and go faster for tests.
+    msg "build: i386, make, gcc -O2 (ASan build)" # ~ 30s
     scripts/config.pl full
-    make CC=gcc CFLAGS="$ASAN_CFLAGS -m32 -O1" LDFLAGS="-m32 $ASAN_CFLAGS"
+    make CC=gcc CFLAGS="$ASAN_CFLAGS -m32 -O2" LDFLAGS="-m32 $ASAN_CFLAGS"
 
-    msg "test: i386, make, gcc -O1 (ASan build)"
+    msg "test: i386, make, gcc -O2 (ASan build)"
     make test
 
-    msg "test ssl-opt.sh, i386, make, gcc-O1"
+    msg "test ssl-opt.sh, i386, make, gcc-O2"
     if_build_succeeded tests/ssl-opt.sh
 }
-support_test_m32_o1 () {
+support_test_m32_o2 () {
     support_test_m32_o0 "$@"
 }
 
@@ -1534,15 +1565,30 @@ component_build_arm_none_eabi_gcc () {
     ${ARM_NONE_EABI_GCC_PREFIX}size library/*.o
 }
 
-component_build_arm_none_eabi_gcc_arm5vte () {
-    msg "build: ${ARM_NONE_EABI_GCC_PREFIX}gcc -march=arm5vte" # ~ 10s
+component_build_arm_linux_gnueabi_gcc_arm5vte () {
+    msg "build: ${ARM_LINUX_GNUEABI_GCC_PREFIX}gcc -march=arm5vte" # ~ 10s
     scripts/config.pl baremetal
     # Build for a target platform that's close to what Debian uses
     # for its "armel" distribution (https://wiki.debian.org/ArmEabiPort).
     # See https://github.com/ARMmbed/mbedtls/pull/2169 and comments.
-    # It would be better to build with arm-linux-gnueabi-gcc but
-    # we don't have that on our CI at this time.
-    make CC="${ARM_NONE_EABI_GCC_PREFIX}gcc" AR="${ARM_NONE_EABI_GCC_PREFIX}ar" CFLAGS='-Werror -Wall -Wextra -march=armv5te -O1' LDFLAGS='-march=armv5te' SHELL='sh -x' lib
+    # Build everything including programs, see for example
+    # https://github.com/ARMmbed/mbedtls/pull/3449#issuecomment-675313720
+    make CC="${ARM_LINUX_GNUEABI_GCC_PREFIX}gcc" AR="${ARM_LINUX_GNUEABI_GCC_PREFIX}ar" CFLAGS='-Werror -Wall -Wextra -march=armv5te -O1' LDFLAGS='-march=armv5te'
+
+    msg "size: ${ARM_LINUX_GNUEABI_GCC_PREFIX}gcc -march=armv5te -O1"
+    ${ARM_LINUX_GNUEABI_GCC_PREFIX}size library/*.o
+}
+support_build_arm_linux_gnueabi_gcc_arm5vte () {
+    type ${ARM_LINUX_GNUEABI_GCC_PREFIX}gcc >/dev/null 2>&1
+}
+
+component_build_arm_none_eabi_gcc_arm5vte () {
+    msg "build: ${ARM_NONE_EABI_GCC_PREFIX}gcc -march=arm5vte" # ~ 10s
+    scripts/config.pl baremetal
+    # This is an imperfect substitute for
+    # component_build_arm_linux_gnueabi_gcc_arm5vte
+    # in case the gcc-arm-linux-gnueabi toolchain is not available
+    make CC="${ARM_NONE_EABI_GCC_PREFIX}gcc" AR="${ARM_NONE_EABI_GCC_PREFIX}ar" CFLAGS='-std=c99 -Werror -Wall -Wextra -march=armv5te -O1' LDFLAGS='-march=armv5te' SHELL='sh -x' lib
 
     msg "size: ${ARM_NONE_EABI_GCC_PREFIX}gcc -march=armv5te -O1"
     ${ARM_NONE_EABI_GCC_PREFIX}size library/*.o
@@ -1676,7 +1722,7 @@ component_test_cmake_out_of_source () {
     MBEDTLS_ROOT_DIR="$PWD"
     mkdir "$OUT_OF_SOURCE_DIR"
     cd "$OUT_OF_SOURCE_DIR"
-    cmake "$MBEDTLS_ROOT_DIR"
+    cmake -D CMAKE_BUILD_TYPE:String=Check "$MBEDTLS_ROOT_DIR"
     make
 
     msg "test: cmake 'out-of-source' build"
