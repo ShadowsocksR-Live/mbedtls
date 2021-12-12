@@ -99,6 +99,7 @@ mbedtls_ecp_gen_keypair
 mbedtls_ecp_gen_key
 mbedtls_ecp_check_pub_priv
 
+mbedtls_pem_write_buffer
 mbedtls_pk_info_from_type
 mbedtls_pk_init
 mbedtls_pk_free
